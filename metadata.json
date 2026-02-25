@@ -1,0 +1,8 @@
+{
+  "name": "RemoteConnect",
+  "description": "A high-performance remote desktop access application with WebRTC streaming, remote control, and secure file transfer.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
