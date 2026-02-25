@@ -1,0 +1,25 @@
+{
+  "name": "remote-connect-desktop",
+  "version": "1.0.0",
+  "description": "RemoteConnect Desktop Client",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "electron": "^30.0.0",
+    "robotjs": "^0.6.0",
+    "socket.io-client": "^4.7.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.remoteconnect.app",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    }
+  }
+}

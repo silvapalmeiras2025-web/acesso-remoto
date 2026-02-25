@@ -3,15 +3,21 @@ import { signalingService } from './services/signalingService';
 import { WebRTCService } from './services/webRTCService';
 import ConnectionPanel from './components/ConnectionPanel';
 import RemoteSession from './components/RemoteSession';
-import { Monitor, Shield, Activity, Globe, Wifi, Zap, Settings, User } from 'lucide-react';
+import NativeAgentModal from './components/NativeAgentModal';
+import DownloadModal from './components/DownloadModal';
+import { Monitor, Shield, Activity, Globe, Wifi, Zap, Settings, User, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [myId] = useState(() => Math.floor(100000000 + Math.random() * 900000000).toString());
   const [session, setSession] = useState<{ deviceId: string; isHost: boolean; webRTC: WebRTCService } | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showNativeModal, setShowNativeModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   useEffect(() => {
+    (window as any).openNativeAgentModal = () => setShowNativeModal(true);
+    
     const socket = signalingService.connect();
     socket.emit('join', myId);
 
@@ -46,7 +52,20 @@ export default function App() {
     };
   }, [myId, session]);
 
-  const handleConnect = useCallback(async (targetId: string) => {
+  const handleConnect = useCallback(async (targetId: string, password?: string) => {
+    // Verify password first
+    const verifyRes = await fetch('/api/verify-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: targetId, senha: password })
+    });
+    const { valid } = await verifyRes.json();
+
+    if (!valid) {
+      alert("Senha incorreta para este dispositivo.");
+      return;
+    }
+
     const webRTC = new WebRTCService(targetId, true);
     await webRTC.createOffer();
     setSession({ deviceId: targetId, isHost: false, webRTC });
@@ -55,7 +74,7 @@ export default function App() {
     fetch('/api/devices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: targetId, nome: `Device ${targetId.substr(0, 4)}` })
+      body: JSON.stringify({ id: targetId, nome: `Device ${targetId.substr(0, 4)}`, senha: password })
     });
   }, []);
 
@@ -81,7 +100,13 @@ export default function App() {
           <div className="hidden md:flex items-center gap-8 text-sm font-bold text-zinc-500 uppercase tracking-widest">
             <a href="#" className="text-emerald-500">Conectar</a>
             <a href="#" className="hover:text-zinc-900 dark:hover:text-white transition-colors">Dispositivos</a>
-            <a href="#" className="hover:text-zinc-900 dark:hover:text-white transition-colors">Segurança</a>
+            <button 
+              onClick={() => setShowDownloadModal(true)}
+              className="flex items-center gap-2 hover:text-emerald-500 transition-colors"
+            >
+              <Download size={16} />
+              Baixar App
+            </button>
             <a href="#" className="hover:text-zinc-900 dark:hover:text-white transition-colors">Suporte</a>
           </div>
 
@@ -102,6 +127,12 @@ export default function App() {
 
         <main className="py-12">
           <AnimatePresence mode="wait">
+            {showNativeModal && (
+              <NativeAgentModal myId={myId} onClose={() => setShowNativeModal(false)} />
+            )}
+            {showDownloadModal && (
+              <DownloadModal onClose={() => setShowDownloadModal(false)} />
+            )}
             {!session ? (
               <motion.div
                 key="home"

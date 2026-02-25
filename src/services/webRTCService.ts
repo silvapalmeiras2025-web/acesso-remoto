@@ -109,6 +109,36 @@ export class WebRTCService {
     }
   }
 
+  async sendFile(file: File, onProgress: (progress: number) => void) {
+    if (!this.dataChannel || this.dataChannel.readyState !== "open") return;
+
+    const CHUNK_SIZE = 16384; // 16KB
+    const arrayBuffer = await file.arrayBuffer();
+    
+    // Send metadata first
+    this.sendData({
+      type: 'file-start',
+      name: file.name,
+      size: file.size,
+      mimeType: file.type
+    });
+
+    let offset = 0;
+    while (offset < arrayBuffer.byteLength) {
+      const chunk = arrayBuffer.slice(offset, offset + CHUNK_SIZE);
+      this.dataChannel.send(chunk);
+      offset += CHUNK_SIZE;
+      onProgress(Math.min(100, (offset / arrayBuffer.byteLength) * 100));
+      
+      // Small delay to prevent buffer overflow
+      if (this.dataChannel.bufferedAmount > 1024 * 1024) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    this.sendData({ type: 'file-end' });
+  }
+
   onTrack(callback: (stream: MediaStream) => void) {
     this.onTrackCallback = callback;
   }

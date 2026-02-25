@@ -12,13 +12,21 @@ interface ConnectionPanelProps {
 export default function ConnectionPanel({ myId, onConnect, onStartHosting }: ConnectionPanelProps) {
   const [targetId, setTargetId] = useState('');
   const [password, setPassword] = useState('');
+  const [myPassword, setMyPassword] = useState('123456');
   const [recentDevices, setRecentDevices] = useState<Device[]>([]);
 
   useEffect(() => {
     fetch('/api/devices')
       .then(res => res.json())
       .then(data => setRecentDevices(data));
-  }, []);
+      
+    // Register self with default password
+    fetch('/api/devices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: myId, nome: 'Este Computador', senha: myPassword })
+    });
+  }, [myId, myPassword]);
 
   return (
     <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 p-6">
@@ -34,24 +42,34 @@ export default function ConnectionPanel({ myId, onConnect, onStartHosting }: Con
               <Shield size={24} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Acesso Remoto</h2>
-              <p className="text-sm text-zinc-500">Seu dispositivo está pronto</p>
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Este Dispositivo</h2>
+              <p className="text-sm text-zinc-500">Pronto para conexões</p>
             </div>
           </div>
 
           <div className="space-y-6">
             <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Seu ID de Acesso</label>
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Seu Endereço</label>
               <div className="flex items-center justify-between">
                 <span className="text-3xl font-mono font-bold text-zinc-900 dark:text-white tracking-tighter">{myId}</span>
-                <button className="text-emerald-500 text-xs font-bold hover:underline">COPIAR</button>
+                <button 
+                  onClick={() => navigator.clipboard.writeText(myId)}
+                  className="text-emerald-500 text-xs font-bold hover:underline"
+                >
+                  COPIAR
+                </button>
               </div>
             </div>
 
             <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Senha Temporária</label>
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2 block">Senha de Acesso</label>
               <div className="flex items-center justify-between">
-                <span className="text-xl font-mono font-medium text-zinc-600 dark:text-zinc-400">••••••••</span>
+                <input 
+                  type="text"
+                  value={myPassword}
+                  onChange={(e) => setMyPassword(e.target.value)}
+                  className="bg-transparent text-xl font-mono font-medium text-zinc-600 dark:text-zinc-400 focus:outline-none w-32"
+                />
                 <button className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                   <Settings size={18} />
                 </button>
@@ -63,7 +81,15 @@ export default function ConnectionPanel({ myId, onConnect, onStartHosting }: Con
               className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
             >
               <Monitor size={20} />
-              Permitir Controle Remoto
+              Aguardar Conexão
+            </button>
+
+            <button 
+              onClick={() => (window as any).openNativeAgentModal()}
+              className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-widest border border-white/5"
+            >
+              <Cpu size={16} />
+              Configurar Agente Nativo
             </button>
           </div>
         </motion.div>

@@ -16,6 +16,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS dispositivos (
     id TEXT PRIMARY KEY,
     nome TEXT,
+    senha TEXT,
     ultimo_acesso DATETIME,
     status TEXT
   );
@@ -39,6 +40,13 @@ db.exec(`
   );
 `);
 
+// Migration: Add 'senha' column if it doesn't exist (for existing databases)
+const tableInfo = db.prepare("PRAGMA table_info(dispositivos)").all();
+const hasSenha = tableInfo.some((col: any) => col.name === 'senha');
+if (!hasSenha) {
+  db.exec("ALTER TABLE dispositivos ADD COLUMN senha TEXT DEFAULT '123456'");
+}
+
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
@@ -60,9 +68,15 @@ async function startServer() {
   });
 
   app.post("/api/devices", (req, res) => {
-    const { id, nome } = req.body;
-    db.prepare("INSERT OR REPLACE INTO dispositivos (id, nome, ultimo_acesso, status) VALUES (?, ?, datetime('now'), 'online')").run(id, nome);
+    const { id, nome, senha } = req.body;
+    db.prepare("INSERT OR REPLACE INTO dispositivos (id, nome, senha, ultimo_acesso, status) VALUES (?, ?, ?, datetime('now'), 'online')").run(id, nome, senha || '123456');
     res.json({ success: true });
+  });
+
+  app.post("/api/verify-password", (req, res) => {
+    const { id, senha } = req.body;
+    const device = db.prepare("SELECT * FROM dispositivos WHERE id = ? AND senha = ?").get(id, senha);
+    res.json({ valid: !!device });
   });
 
   // Socket.io for Signaling
@@ -72,6 +86,17 @@ async function startServer() {
     socket.on("join", (deviceId) => {
       socket.join(deviceId);
       console.log(`Socket ${socket.id} joined device room: ${deviceId}`);
+    });
+
+    // Identifica se é um agente nativo
+    socket.on("identify-agent", (deviceId) => {
+      socket.join(`agent-${deviceId}`);
+      console.log(`Native Agent connected for device: ${deviceId}`);
+    });
+
+    socket.on("native-command", ({ to, command }) => {
+      // Encaminha o comando para o agente nativo do dispositivo alvo
+      socket.to(`agent-${to}`).emit("execute-command", command);
     });
 
     socket.on("offer", ({ to, offer }) => {
