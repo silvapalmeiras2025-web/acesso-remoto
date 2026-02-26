@@ -9,47 +9,56 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("remote_connect.db");
-
-// Initialize database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS dispositivos (
-    id TEXT PRIMARY KEY,
-    nome TEXT,
-    senha TEXT,
-    ultimo_acesso DATETIME,
-    status TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS sessoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    dispositivo_origem TEXT,
-    dispositivo_destino TEXT,
-    inicio DATETIME,
-    fim DATETIME,
-    ip_origem TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS transferencias (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sessao_id INTEGER,
-    nome_arquivo TEXT,
-    tamanho INTEGER,
-    status TEXT,
-    data_envio DATETIME
-  );
-`);
-
-// Migration: Add 'senha' column if it doesn't exist (for existing databases)
-const tableInfo = db.prepare("PRAGMA table_info(dispositivos)").all();
-const hasSenha = tableInfo.some((col: any) => col.name === 'senha');
-if (!hasSenha) {
-  db.exec("ALTER TABLE dispositivos ADD COLUMN senha TEXT DEFAULT '123456'");
-}
-
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
+  
+  let db: any;
+  try {
+    db = new Database("remote_connect.db");
+    console.log("✅ Database initialized");
+
+    // Initialize database
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dispositivos (
+        id TEXT PRIMARY KEY,
+        nome TEXT,
+        senha TEXT,
+        ultimo_acesso DATETIME,
+        status TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS sessoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dispositivo_origem TEXT,
+        dispositivo_destino TEXT,
+        inicio DATETIME,
+        fim DATETIME,
+        ip_origem TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS transferencias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessao_id INTEGER,
+        nome_arquivo TEXT,
+        tamanho INTEGER,
+        status TEXT,
+        data_envio DATETIME
+      );
+    `);
+
+    // Migration: Add 'senha' column if it doesn't exist (for existing databases)
+    const tableInfo = db.prepare("PRAGMA table_info(dispositivos)").all();
+    const hasSenha = tableInfo.some((col: any) => col.name === 'senha');
+    if (!hasSenha) {
+      db.exec("ALTER TABLE dispositivos ADD COLUMN senha TEXT DEFAULT '123456'");
+    }
+  } catch (err) {
+    console.error("❌ Database initialization failed:", err);
+    // Fallback to memory DB if file DB fails
+    db = new Database(":memory:");
+  }
+
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -59,24 +68,38 @@ async function startServer() {
 
   const PORT = 3000;
 
+  app.get("/health", (req, res) => res.send("OK"));
+
   app.use(express.json());
 
   // API Routes
   app.get("/api/devices", (req, res) => {
-    const devices = db.prepare("SELECT * FROM dispositivos ORDER BY ultimo_acesso DESC").all();
-    res.json(devices);
+    try {
+      const devices = db.prepare("SELECT * FROM dispositivos ORDER BY ultimo_acesso DESC").all();
+      res.json(devices);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch devices" });
+    }
   });
 
   app.post("/api/devices", (req, res) => {
-    const { id, nome, senha } = req.body;
-    db.prepare("INSERT OR REPLACE INTO dispositivos (id, nome, senha, ultimo_acesso, status) VALUES (?, ?, ?, datetime('now'), 'online')").run(id, nome, senha || '123456');
-    res.json({ success: true });
+    try {
+      const { id, nome, senha } = req.body;
+      db.prepare("INSERT OR REPLACE INTO dispositivos (id, nome, senha, ultimo_acesso, status) VALUES (?, ?, ?, datetime('now'), 'online')").run(id, nome, senha || '123456');
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to register device" });
+    }
   });
 
   app.post("/api/verify-password", (req, res) => {
-    const { id, senha } = req.body;
-    const device = db.prepare("SELECT * FROM dispositivos WHERE id = ? AND senha = ?").get(id, senha);
-    res.json({ valid: !!device });
+    try {
+      const { id, senha } = req.body;
+      const device = db.prepare("SELECT * FROM dispositivos WHERE id = ? AND senha = ?").get(id, senha);
+      res.json({ valid: !!device });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to verify password" });
+    }
   });
 
   // Socket.io for Signaling
@@ -145,8 +168,12 @@ async function startServer() {
   }
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+    console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
   });
 }
 
-startServer();
+console.log("🎬 Starting server...");
+startServer().catch(err => {
+  console.error("💥 Fatal server error:", err);
+});
